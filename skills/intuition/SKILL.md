@@ -40,6 +40,16 @@ For creating atoms, triples, depositing, or redeeming — requires a funded wall
 7. **Output machine-readable JSON.** Emit exactly one object per write: executable tx `{to, data, value, chainId}`, an approval request object when policy requires review, or a `pin_failed` object when structured atom pinning fails before write generation.
 8. **Verify after broadcast.** Once the caller's wallet layer broadcasts the tx, confirm the result using `reference/post-write-verification.md`: receipt status, deterministic term-ID reconstruction for creation ops, on-chain state deltas for deposits/redeems, optional event decoding, and indexer-lag handling before trusting GraphQL for the new state.
 
+### Path C: Delegation Operations
+
+For acting under another account's authority via ERC-7710 delegation — executing Intuition writes on a delegator's behalf, issuing or narrowing delegations, revoking authority, or verifying this agent's own delegated authority before acting.
+
+1. **Load the delegation reference.** Read `reference/delegation.md` for the Delegation struct, Smart Accounts Kit contract addresses (identical on both chains), caveat enforcers, EIP-7702 delegator setup, and redemption encoding.
+2. **Verify authority before any delegated write.** Run the authority gate in `reference/delegation-authority.md`: signature validity, delegate binding, expiry, on-chain revocation, and caveat compliance against the intended operation. Halt or reject per its decision tree.
+3. **Build the inner write per Path B.** A delegated Intuition write is a normal Path B operation (session setup, prerequisite queries, encoding, policy gates) whose calldata is then wrapped into `redeemDelegations` — the output tx targets the DelegationManager with `value = "0"`, and the execution value is paid from the delegator's balance.
+4. **Manage delegations with the operation files.** To grant or narrow authority, follow `operations/create-delegation.md` (output: signed delegation object, nothing broadcast). To revoke, follow `operations/revoke-delegation.md` (output: unsigned tx to the DelegationManager; root revocation kills all downstream redelegations).
+5. **Attribution.** Writes redeemed through a delegation execute as the delegator: atoms, triples, and positions are attributed to the delegator's address, not the agent's.
+
 ### Transitioning from Read to Write
 
 If you start with exploration (Path A) and then need to write based on what you discovered, run the Path B session setup at that point — not before. See the Revalidation Bridge in `reference/graphql-queries.md` for safely transitioning from discovered data to write operations.
@@ -128,6 +138,8 @@ reference/                        (Path A: read-only — load these directly)
   simulation.md                   Dry run / simulate writes before executing
   autonomous-policy.md            Approval modes, policy schema, and execution gates
   runtime-enforcement.md          Blocking validator flow before signing
+  delegation.md                   ERC-7710 delegation — Smart Accounts Kit addresses, struct anatomy, enforcers, redemption encoding
+  delegation-authority.md         Agent-side authority verification gate before delegated writes
 
 operations/                       (Path B: writes — run session setup first)
   create-atoms.md                 Create atom vaults from URI data
@@ -137,6 +149,8 @@ operations/                       (Path B: writes — run session setup first)
   batch-deposit.md                Deposit into multiple vaults in one transaction
   batch-redeem.md                 Redeem from multiple vaults in one transaction
   approve.md                      Grant/revoke deposit or redemption approval for delegated flows
+  create-delegation.md            Sign an ERC-7710 delegation granting scoped authority (Path C)
+  revoke-delegation.md            Disable a delegation on-chain, killing downstream authority (Path C)
 ```
 
 ## Protocol Model
@@ -366,6 +380,8 @@ To perform a write, open the corresponding operation file and follow its steps e
 | Deposit into multiple vaults | `operations/batch-deposit.md` | Yes — `msg.value = sum(assets)` |
 | Redeem from multiple vaults | `operations/batch-redeem.md` | No — `value = 0` |
 | Delegate deposit/redemption (receiver ≠ sender) | `operations/approve.md` | No — `value = 0` |
+| Grant scoped authority over your account (ERC-7710) | `operations/create-delegation.md` | No — off-chain EIP-712 signature, nothing broadcast |
+| Revoke a delegation and its redelegations | `operations/revoke-delegation.md` | No — `value = 0`, tx targets the DelegationManager |
 
 For on-chain reads (costs, existence, vault state, previews), follow `reference/reading-state.md`.
 For discovery reads (search, browse, traverse the knowledge graph), follow `reference/graphql-queries.md`.
