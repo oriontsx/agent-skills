@@ -154,6 +154,30 @@ Minimum intent object:
 Use base-10 strings for top-level transaction fields in machine-readable JSON:
 `value`, `chainId`, and the same fields inside `proposedTx`.
 
+## Delegated Sessions (ERC-7710)
+
+When the agent executes on behalf of a delegator under an ERC-7710 delegation,
+the delegation **authority gate** in `reference/delegation-authority.md` wraps
+the decision flow above — it runs in addition to (never instead of) these gates:
+
+1. Resolve the trusted intent and recompute the **inner** MultiVault calldata exactly as for a direct write (steps 1–9 above). The receiver defaults to the **delegator** (the on-chain `msg.sender`), never the agent.
+2. Run the authority gate against that inner execution; halt or reject per its outcomes before proceeding.
+3. The broadcast tx wraps the inner call in `redeemDelegations` and targets the DelegationManager with outer `value: 0`. The address allowlist must therefore include the DelegationManager for the session chain alongside the MultiVault, and per-tx/daily value limits apply to the **inner execution value**, not the outer `value: 0`.
+4. Simulate the outer transaction (step 10) and apply approval mode (step 11); approval-request objects embed the outer redemption tx as `proposedTx`.
+
+Policy file addition for delegated sessions:
+
+```json
+"delegation": {
+  "delegationManagerByChain": {
+    "1155": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3",
+    "13579": "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3"
+  },
+  "requireAuthorityVerification": true,
+  "maxChainDepth": 2
+}
+```
+
 ## Approval Request Output
 
 Use this shape when review is required:
